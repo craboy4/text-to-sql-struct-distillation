@@ -266,7 +266,7 @@ python BIRD/teacher_generation/generate_teacher_data.py \
 
 - BIRD Mini-Dev 数据库和 gold SQL 必须从上游数据包取得，不能以本仓库内容替代。
 - BIRD Mini-Dev 派生的公开数据按 `CC BY-SA 4.0` 发布并保留 BIRD 署名。
-- Qwen3-8B 基座约 19 GB、最佳 LoRA adapter 约 501 MB；两者均不进入普通 Git。
+- Qwen3-8B 基座约 19 GB、已发布的最佳 LoRA adapter 为 174,655,536 bytes；两者均不进入普通 Git。约 501 MB 是远端完整训练 checkpoint 的目录体积，不是下载模型仓库中的 adapter 大小。
 - 作者 EX 使用集合比较并忽略重复行，不能与多重集比较的分数直接混用。
 
 ## 引用

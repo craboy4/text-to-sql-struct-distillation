@@ -1,0 +1,45 @@
+# Python and editor state
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+.idea/
+.vscode/
+
+# Secrets and local machine configuration
+*.env
+teacher_generation/teacher.env
+
+# Downloaded benchmark data and third-party reference checkouts
+archives/
+mini_dev/
+dev/
+train/
+train_filtered/
+tools/
+author_mini_dev/
+reference_struct_sql_distillation/
+__MACOSX/
+
+# Generated teacher data, prompts, predictions, and evaluation output
+teacher_generation/*.jsonl
+teacher_generation/*.json
+training/*.jsonl
+training/*.json
+training/*_eval/
+training/*_pilot/
+training/execution_*/
+training/minidev_*.json
+training/minidev_*/
+training/minidev_*.txt
+training/schemapack_*.json
+training/train_sqlplan_pilot*/
+training/*.log
+training/*.stdout.log
+training/*.stderr.log
+training/__pycache__/
+
+# Large checkpoints and experiment outputs belong in remote/object storage
+models/
+outputs/
+data/

@@ -1,0 +1,24 @@
+run_id: qwen3_8b_bird_lora_3epoch_dbdev4_20260730T183618Z
+base_model: Qwen/Qwen3-8B
+dataset: data/qwen_sft_messages_train_dbdev4.jsonl
+expected_records: 5160
+training:
+  method: lora
+  epochs: 3
+  learning_rate: 5.0e-5
+  per_device_train_batch_size: 1
+  gradient_accumulation_steps: 16
+  max_length: 32768
+  warmup_ratio: 0.03
+  seed: 42
+  lora_rank: 16
+  lora_alpha: 32
+  target_modules: all-linear
+  dtype: bfloat16
+  attention: sdpa
+evaluation:
+  benchmark: BIRD Mini-Dev SQLite
+  evaluator: author_set_execution_accuracy
+  total_questions: 500
+  checkpoint: checkpoint-969
+  ex: 0.504

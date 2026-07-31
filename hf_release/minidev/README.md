@@ -3,7 +3,7 @@ license: cc-by-sa-4.0
 language:
 - zh
 task_categories:
-- text2text-generation
+- text-generation
 tags:
 - text-to-sql
 - bird

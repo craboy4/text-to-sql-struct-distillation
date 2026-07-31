@@ -1,26 +1,68 @@
 # 结构化 Text-to-SQL 蒸馏
 
-本项目使用 BIRD 训练集和 Mini-Dev SQLite 基准，完成从教师样本构造、SFT 训练、推理到执行准确率评测的完整流程。工程组织参考 [Struct-SQL-Distillation](https://github.com/craterlabs/Struct-SQL-Distillation) 的“数据构造 - 训练 - 推理 - 结果”边界，并使用 [BIRD Mini-Dev](https://github.com/bird-bench/mini_dev) 作者提供的 SQLite EX 评测定义。
+[![GitHub](https://img.shields.io/badge/代码-GitHub-181717?logo=github)](https://github.com/craboy4/text-to-sql-struct-distillation)
+[![SFT Dataset](https://img.shields.io/badge/SFT%20数据集-Hugging%20Face-ffd21e?logo=huggingface)](https://huggingface.co/datasets/craboy4/text-to-sql-struct-distillation-sft)
+[![Mini-Dev Dataset](https://img.shields.io/badge/Mini--Dev%20派生数据-Hugging%20Face-ff9d00?logo=huggingface)](https://huggingface.co/datasets/craboy4/text-to-sql-struct-distillation-minidev)
+[![Benchmark](https://img.shields.io/badge/评测-BIRD%20Mini--Dev-2f855a)](https://github.com/bird-bench/mini_dev)
+[![Base Model](https://img.shields.io/badge/基座-Qwen3--8B-6255e8)](https://huggingface.co/Qwen/Qwen3-8B)
 
-## 当前结果
+本项目复现并整理了一个面向 BIRD 的结构化 Text-to-SQL 蒸馏流程：从教师样本构造、SFT 数据导出、Qwen3-8B LoRA 训练，到 Mini-Dev 推理和作者 SQLite Execution Accuracy (EX) 评测。工程边界参考 [Struct-SQL-Distillation](https://github.com/craterlabs/Struct-SQL-Distillation)，评测口径采用 [BIRD Mini-Dev](https://github.com/bird-bench/mini_dev) 的作者实现。
 
-评测使用 BIRD Mini-Dev SQLite 的 500 个样本，作者的集合型 Execution Accuracy (EX) 标准。当前远端推理产物中，最新完整微调 checkpoint 的结果如下：
+> **公开资产：** [通用 SFT（6,246 条）](https://huggingface.co/datasets/craboy4/text-to-sql-struct-distillation-sft) 和 [Mini-Dev 派生 SFT（500 条）](https://huggingface.co/datasets/craboy4/text-to-sql-struct-distillation-minidev) 已发布到 Hugging Face。正式 DB-dev4 SFT、最佳 LoRA adapter 和真实推理输出会在从远端训练机取得并核验后按版本补充。
+
+---
+
+## 项目概览
+
+```mermaid
+flowchart LR
+    A[BIRD 训练样本] --> B[教师样本构造]
+    B --> C[SQL 执行校验]
+    C --> D[SFT messages JSONL]
+    D --> E[Qwen3-8B LoRA 训练]
+    E --> F[Mini-Dev SQL 推理]
+    F --> G[作者 SQLite EX 评测]
+    D -.公开.-> H[Hugging Face 数据集]
+    E -.待远端资产到位.-> I[Hugging Face LoRA]
+    G -.待真实输出到位.-> J[Hugging Face 结果集]
+```
+
+### 核心方法
+
+- **结构化教师信号：** 每个样本要求 Schema Linking、Query Plan 和可执行 SQLite SQL 三段式输出，而不是无约束的自由推理。
+- **执行导向的数据构造：** 教师输出经过 SQL 解析与执行校验后再导出为 Qwen messages 格式。
+- **可复现的训练与评测边界：** 训练配置、提示词构造、预测格式适配和作者 EX 评测脚本均在本仓库管理；原始 BIRD 数据库、gold SQL 和大型权重不进入 Git。
+
+---
+
+## 已验证结果
+
+评测使用 BIRD Mini-Dev SQLite 的 500 道题目和作者集合型 Execution Accuracy (EX) 定义。
 
 | 模型 | 训练状态 | EX | 正确数 |
 | --- | --- | ---: | ---: |
 | Qwen3-8B | 初始模型 | 41.80% | 209 / 500 |
-| Qwen3-8B + LoRA checkpoint-969 | 3 epoch SFT | 50.40% | 252 / 500 |
+| **Qwen3-8B + LoRA checkpoint-969** | **DB-dev4 SFT，3 epoch** | **50.40%** | **252 / 500** |
 
-评测的详细口径见 [docs/评测说明.md](docs/评测说明.md)，每项资产的位置和版本见 [docs/资产清单.md](docs/资产清单.md)。
+相较初始 Qwen3-8B，最佳 checkpoint 在该口径上提升 **8.60 个百分点**。详细约束和结果解释见 [评测说明](docs/评测说明.md)。
 
-## Hugging Face 发布
+---
 
-- [通用 SFT 数据集（6,246 条）](https://huggingface.co/datasets/craboy4/text-to-sql-struct-distillation-sft)
-- [Mini-Dev 派生 SFT 数据集（500 条）](https://huggingface.co/datasets/craboy4/text-to-sql-struct-distillation-minidev)
+## 资产发布
 
-正式 DB-dev4 SFT、Qwen3-8B LoRA `checkpoint-969`、真实预测和评测输出会在远端资产核验后分别发布；仓库链接和不可变版本会同步登记到资产清单。
+| 资产 | 位置 | 发布状态 |
+| --- | --- | --- |
+| 通用 SFT messages | [Hugging Face 数据集](https://huggingface.co/datasets/craboy4/text-to-sql-struct-distillation-sft) | 已发布，6,246 条 |
+| Mini-Dev 派生 SFT | [Hugging Face 数据集](https://huggingface.co/datasets/craboy4/text-to-sql-struct-distillation-minidev) | 已发布，500 条 |
+| 正式 DB-dev4 SFT | 独立数据集版本 | 远端正式文件待获取 |
+| Qwen3-8B LoRA `checkpoint-969` | [Hugging Face 模型](https://huggingface.co/craboy4/qwen3-8b-bird-lora-dbdev4) | 远端约 501 MB adapter 待获取 |
+| 预测与作者 EX 输出 | [Hugging Face 结果集](https://huggingface.co/datasets/craboy4/text-to-sql-struct-distillation-results) | 远端真实输出待获取 |
 
-## 目录
+每项资产的来源、大小、远端路径和发布边界记录在 [资产清单](docs/资产清单.md)。不会公开 BIRD SQLite 数据库、gold SQL、未确认许可证的原始数据或任何 API 凭据。
+
+---
+
+## 代码结构
 
 ```text
 BIRD/
@@ -29,37 +71,69 @@ BIRD/
 ├── evaluation/author_minidev/# BIRD Mini-Dev 作者 EX 脚本副本
 ├── configs/sft/              # 可复现训练配置
 ├── scripts/                  # 远端运行和格式适配脚本
-├── docs/                     # 中文文档、资产和评测记录
-├── train*/                   # 原始/过滤训练集，不纳入 Git
-├── mini_dev/                 # BIRD Mini-Dev 数据库，不纳入 Git
-└── author_mini_dev/          # 上游代码快照，不纳入 Git
+├── hf_release/               # Hugging Face 数据/模型/结果卡
+└── docs/                     # 中文文档、资产清单和评测记录
 ```
 
-Git 只跟踪代码、配置、文档和小型结果元数据。原始数据、SFT JSONL、推理响应、SQLite 数据库、模型权重与检查点由远端算力平台或后续数据/模型仓库保存，路径和哈希记录在资产清单中。
+## 快速复现
 
-## 工作流
+### 1. 导出 SFT 数据
 
-1. **构造样本**：从 `teacher_generation/generate_teacher_data.py` 生成带 schema、evidence 与执行校验的教师样本；使用 `export_qwen_sft.py` 导出 SFT messages。
-2. **准备训练集**：按数据库划分训练集，当前远端已使用 `qwen_sft_messages_train_dbdev4.jsonl`，共 5,160 条样本。
-3. **训练**：远端执行 `training/start_sft_3epoch_dbdev.sh`。该实验使用 Qwen3-8B、LoRA rank 16、learning rate `5e-5`、3 epoch、最大长度 32,768。
-4. **推理**：使用 `training/run_minidev_local.py` 或算力平台既有推理流程，生成 `question_id/sql` JSONL 预测。
-5. **评测**：使用 `scripts/evaluate_author_minidev.sh` 适配预测格式并调用作者 `evaluation_ex.py`。
-
-## 快速评测
-
-远端环境中，准备好 `PROJECT_ROOT`、Mini-Dev SQLite 数据库与作者的 `mini_dev_prompt.jsonl` 后：
+在已准备好教师样本及其执行校验结果的环境中：
 
 ```bash
-export PROJECT_ROOT=/root/autodl-tmp/text2sql_qwen3
-bash scripts/evaluate_author_minidev.sh \
-  "$PROJECT_ROOT/outputs/<run>/predictions.jsonl" \
-  "$PROJECT_ROOT/evaluation_results/<run>"
+cd ..
+python BIRD/teacher_generation/export_qwen_sft.py
 ```
 
-脚本按作者要求以 500 题为分母；若输入预测缺少某题，则该题以空 SQL 计错，避免因缺失预测虚高结果。
+生成的 JSONL 不提交到 Git，应发布到对应的 Hugging Face 数据集仓库并附带数据卡和哈希。
 
-## 复现边界
+### 2. 启动 Qwen3-8B LoRA SFT
 
-- BIRD Mini-Dev 的数据库和 gold SQL 需要从上游数据包获取，不能用本仓库的 Git 内容替代。
-- Qwen3-8B 基座约 19 GB，LoRA checkpoint 约 501 MB，均不进入普通 Git；发布时应分别上传到模型仓库并在资产清单登记版本与哈希。
-- 作者 EX 使用集合比较，忽略重复行；它与多重集比较的分数不可直接混用。
+远端训练环境配置为 Qwen3-8B、LoRA rank 16、learning rate `5e-5`、最大长度 32,768、3 epoch：
+
+```bash
+bash training/start_sft_3epoch_dbdev.sh
+```
+
+当前已验证训练集为按数据库划分的 DB-dev4 SFT，共 5,160 条。完整配置见 [qwen3_8b_bird_lora_3epoch_dbdev4.yaml](configs/sft/qwen3_8b_bird_lora_3epoch_dbdev4.yaml)。
+
+### 3. 推理与作者 EX 评测
+
+```bash
+python training/run_minidev_local.py \
+  --model <Qwen3-8B_基座目录> \
+  --adapter <checkpoint-969_目录> \
+  --prompts <minidev_messages.jsonl> \
+  --output <predictions.jsonl> \
+  --batch-size 8
+
+bash scripts/evaluate_author_minidev.sh \
+  <predictions.jsonl> \
+  <evaluation_output_dir>
+```
+
+评测脚本会以 500 题为固定分母；缺失预测以空 SQL 计错，避免因只评估部分样本而虚高分数。
+
+---
+
+## 数据与评测边界
+
+- BIRD Mini-Dev 数据库和 gold SQL 必须从上游数据包取得，不能以本仓库内容替代。
+- BIRD Mini-Dev 派生的公开数据按 `CC BY-SA 4.0` 发布并保留 BIRD 署名。
+- Qwen3-8B 基座约 19 GB、最佳 LoRA adapter 约 501 MB；两者均不进入普通 Git。
+- 作者 EX 使用集合比较并忽略重复行，不能与多重集比较的分数直接混用。
+
+## 引用
+
+```bibtex
+@inproceedings{li2024bird,
+  title={Can LLM Already Serve as A Database Interface? A BIg Bench for Large-Scale Database Grounded Text-to-SQLs},
+  author={Li, Jinyang and others},
+  year={2024}
+}
+```
+
+## 致谢
+
+本项目的工程组织参考 [craterlabs/Struct-SQL-Distillation](https://github.com/craterlabs/Struct-SQL-Distillation)，Mini-Dev 基准和作者评测实现来自 [bird-bench/mini_dev](https://github.com/bird-bench/mini_dev)。

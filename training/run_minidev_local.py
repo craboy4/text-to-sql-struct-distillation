@@ -67,9 +67,14 @@ def completed_indexes(path: Path) -> set[int]:
     return done
 
 
-def render_chat(tokenizer: Any, messages: list[dict[str, str]]) -> str:
+def render_chat(tokenizer: Any, messages: list[dict[str, str]], enable_thinking: bool) -> str:
     try:
-        return tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True, enable_thinking=False)
+        return tokenizer.apply_chat_template(
+            messages,
+            tokenize=False,
+            add_generation_prompt=True,
+            enable_thinking=enable_thinking,
+        )
     except TypeError:
         return tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
 
@@ -92,6 +97,7 @@ def main() -> int:
     parser.add_argument("--max-new-tokens", type=int, default=1_024)
     parser.add_argument("--expected-prompts", type=int, default=EXPECTED_PROMPTS)
     parser.add_argument("--limit", type=int, default=0, help="0 runs every pending unique Mini-Dev question")
+    parser.add_argument("--enable-thinking", action="store_true", help="Use Qwen3's native thinking chat template")
     args = parser.parse_args()
     if (
         args.batch_size < 1
@@ -124,7 +130,7 @@ def main() -> int:
 
     rendered: list[tuple[int, dict[str, Any], str]] = []
     for record in pending:
-        text = render_chat(tokenizer, record["messages"])
+        text = render_chat(tokenizer, record["messages"], args.enable_thinking)
         length = len(tokenizer.encode(text, add_special_tokens=False))
         if length > args.max_input_tokens:
             raise ValidationError(
@@ -134,7 +140,8 @@ def main() -> int:
     rendered.sort(key=lambda item: item[0])
 
     print(
-        f"loading_model={args.model} pending_unique_questions={len(rendered)} batch_size={args.batch_size}",
+        f"loading_model={args.model} pending_unique_questions={len(rendered)} batch_size={args.batch_size} "
+        f"enable_thinking={args.enable_thinking}",
         flush=True,
     )
     model = AutoModelForCausalLM.from_pretrained(

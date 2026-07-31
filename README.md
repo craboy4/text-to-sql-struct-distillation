@@ -13,6 +13,13 @@
 
 评测的详细口径见 [docs/评测说明.md](docs/评测说明.md)，每项资产的位置和版本见 [docs/资产清单.md](docs/资产清单.md)。
 
+## Hugging Face 发布
+
+- [通用 SFT 数据集（6,246 条）](https://huggingface.co/datasets/craboy4/text-to-sql-struct-distillation-sft)
+- [Mini-Dev 派生 SFT 数据集（500 条）](https://huggingface.co/datasets/craboy4/text-to-sql-struct-distillation-minidev)
+
+正式 DB-dev4 SFT、Qwen3-8B LoRA `checkpoint-969`、真实预测和评测输出会在远端资产核验后分别发布；仓库链接和不可变版本会同步登记到资产清单。
+
 ## 目录
 
 ```text

@@ -1,6 +1,7 @@
 # 结构化 Text-to-SQL 蒸馏
 
 [![GitHub](https://img.shields.io/badge/代码-GitHub-181717?logo=github)](https://github.com/craboy4/text-to-sql-struct-distillation)
+[![Fine-tuned Model](https://img.shields.io/badge/微调模型-Hugging%20Face-ff9d00?logo=huggingface)](https://huggingface.co/craboy4/qwen3-8b-bird-lora-dbdev4)
 [![SFT Dataset](https://img.shields.io/badge/SFT%20数据集-Hugging%20Face-ffd21e?logo=huggingface)](https://huggingface.co/datasets/craboy4/text-to-sql-struct-distillation-sft)
 [![Mini-Dev Dataset](https://img.shields.io/badge/Mini--Dev%20派生数据-Hugging%20Face-ff9d00?logo=huggingface)](https://huggingface.co/datasets/craboy4/text-to-sql-struct-distillation-minidev)
 [![Benchmark](https://img.shields.io/badge/评测-BIRD%20Mini--Dev-2f855a)](https://github.com/bird-bench/mini_dev)

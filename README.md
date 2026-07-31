@@ -8,7 +8,7 @@
 
 本项目复现并整理了一个面向 BIRD 的结构化 Text-to-SQL 蒸馏流程：从教师样本构造、SFT 数据导出、Qwen3-8B LoRA 训练，到 Mini-Dev 推理和作者 SQLite Execution Accuracy (EX) 评测。工程边界参考 [Struct-SQL-Distillation](https://github.com/craterlabs/Struct-SQL-Distillation)，评测口径采用 [BIRD Mini-Dev](https://github.com/bird-bench/mini_dev) 的作者实现。
 
-> **公开资产：** [通用 SFT（6,246 条）](https://huggingface.co/datasets/craboy4/text-to-sql-struct-distillation-sft) 和 [Mini-Dev 派生 SFT（500 条）](https://huggingface.co/datasets/craboy4/text-to-sql-struct-distillation-minidev) 已发布到 Hugging Face。正式 DB-dev4 SFT、最佳 LoRA adapter 和真实推理输出会在从远端训练机取得并核验后按版本补充。
+> **公开资产：** [完整 SFT（6,246 条）及正式 DB-dev4 训练 split（5,160 条）](https://huggingface.co/datasets/craboy4/text-to-sql-struct-distillation-sft) 和 [Mini-Dev 派生 SFT（500 条）](https://huggingface.co/datasets/craboy4/text-to-sql-struct-distillation-minidev) 已发布到 Hugging Face。最佳 LoRA adapter 和真实推理输出会在从远端训练机取得并核验后按版本补充。
 
 ---
 
@@ -52,9 +52,10 @@ flowchart LR
 
 | 资产 | 位置 | 发布状态 |
 | --- | --- | --- |
-| 通用 SFT messages | [Hugging Face 数据集](https://huggingface.co/datasets/craboy4/text-to-sql-struct-distillation-sft) | 已发布，6,246 条 |
+| 完整 SFT messages | [Hugging Face 数据集](https://huggingface.co/datasets/craboy4/text-to-sql-struct-distillation-sft) | 已发布，6,246 条 |
+| 正式 DB-dev4 训练 split | [同一数据集的 `dbdev4_train_5160.jsonl`](https://huggingface.co/datasets/craboy4/text-to-sql-struct-distillation-sft/tree/main/splits) | 已发布，5,160 条 |
+| DB-dev4 execution-dev | [同一数据集的 `dbdev4_execution_dev_prompts_400.jsonl`](https://huggingface.co/datasets/craboy4/text-to-sql-struct-distillation-sft/tree/main/splits) | 已发布，4 个保留数据库各 100 条，无 gold SQL |
 | Mini-Dev 派生 SFT | [Hugging Face 数据集](https://huggingface.co/datasets/craboy4/text-to-sql-struct-distillation-minidev) | 已发布，500 条 |
-| 正式 DB-dev4 SFT | 独立数据集版本 | 远端正式文件待获取 |
 | Qwen3-8B LoRA `checkpoint-969` | [Hugging Face 模型](https://huggingface.co/craboy4/qwen3-8b-bird-lora-dbdev4) | 远端约 501 MB adapter 待获取 |
 | 预测与作者 EX 输出 | [Hugging Face 结果集](https://huggingface.co/datasets/craboy4/text-to-sql-struct-distillation-results) | 远端真实输出待获取 |
 
@@ -96,7 +97,7 @@ python BIRD/teacher_generation/export_qwen_sft.py
 bash training/start_sft_3epoch_dbdev.sh
 ```
 
-当前已验证训练集为按数据库划分的 DB-dev4 SFT，共 5,160 条。完整配置见 [qwen3_8b_bird_lora_3epoch_dbdev4.yaml](configs/sft/qwen3_8b_bird_lora_3epoch_dbdev4.yaml)。
+当前已验证训练集为从完整 SFT 按数据库划分出的 DB-dev4 SFT，共 5,160 条。4 个保留数据库各抽取 100 条构成 400 条 execution-dev，`works_cycles` 因长上下文单独剔除；完整划分和哈希见数据集卡。训练命令未再从 5,160 条中随机切 validation-loss 集。完整配置见 [qwen3_8b_bird_lora_3epoch_dbdev4.yaml](configs/sft/qwen3_8b_bird_lora_3epoch_dbdev4.yaml)。
 
 ### 3. 推理与作者 EX 评测
 

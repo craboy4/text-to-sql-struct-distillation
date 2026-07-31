@@ -1,4 +1,5 @@
 import json
+import os
 import psycopg2
 import pymysql
 import sqlite3
@@ -18,26 +19,24 @@ def load_json(dir):
 
 # psycopg2   2.9.9
 def connect_postgresql():
-    # Open database connection
-    # Connect to the database
     db = psycopg2.connect(
-        "dbname=bird user=postgres host=localhost password=li123911 port=5432"
+        dbname=os.environ.get("BIRD_POSTGRES_DB", "bird"),
+        user=os.environ.get("BIRD_POSTGRES_USER", "postgres"),
+        host=os.environ.get("BIRD_POSTGRES_HOST", "localhost"),
+        password=os.environ["BIRD_POSTGRES_PASSWORD"],
+        port=os.environ.get("BIRD_POSTGRES_PORT", "5432"),
     )
     return db
 
 
 # PyMySQL  1.1.1
 def connect_mysql():
-    # Open database connection
-    # Connect to the database"
     db = pymysql.connect(
-        host="localhost",
-        user="root",
-        password="li123911",
-        database="BIRD",
-        # unix_socket="/tmp/mysql.sock",
-        unix_socket="/var/run/mysqld/mysqld.sock"
-        # port=3306,
+        host=os.environ.get("BIRD_MYSQL_HOST", "localhost"),
+        user=os.environ.get("BIRD_MYSQL_USER", "root"),
+        password=os.environ["BIRD_MYSQL_PASSWORD"],
+        database=os.environ.get("BIRD_MYSQL_DATABASE", "BIRD"),
+        unix_socket=os.environ.get("BIRD_MYSQL_SOCKET", "/var/run/mysqld/mysqld.sock"),
     )
     return db
 

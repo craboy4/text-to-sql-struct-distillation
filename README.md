@@ -76,45 +76,189 @@ BIRD/
 └── docs/                     # 中文文档、资产清单和评测记录
 ```
 
-## 快速复现
+## 从零复现
 
-### 1. 导出 SFT 数据
+### 1. 克隆代码并创建工作目录
 
-在已准备好教师样本及其执行校验结果的环境中：
+以下命令假设 Linux GPU 机器。代码仓库放在 `PROJECT_ROOT/BIRD`，而模型、数据、输出放在 `PROJECT_ROOT` 下，避免大文件进入 Git。
 
 ```bash
-cd ..
-python BIRD/teacher_generation/export_qwen_sft.py
+export PROJECT_ROOT=/data/text2sql_qwen3
+git clone https://github.com/craboy4/text-to-sql-struct-distillation.git "$PROJECT_ROOT/BIRD"
+cd "$PROJECT_ROOT/BIRD"
+
+python -m pip install -U huggingface_hub
+python -m pip install torch transformers peft accelerate ms-swift
 ```
 
-生成的 JSONL 不提交到 Git，应发布到对应的 Hugging Face 数据集仓库并附带数据卡和哈希。
+训练需要 CUDA、PyTorch、`ms-swift` 和足够的显存/磁盘；作者 EX 评测的 Python 依赖以 BIRD Mini-Dev 上游 `requirements.txt` 为准。仓库的 [preflight.py](training/preflight.py) 会在启动训练前检查数据、模型和运行环境。默认检查针对本实验的远端镜像及 Blackwell GPU；迁移到其他硬件时应先调整并记录对应环境检查。
 
-### 2. 启动 Qwen3-8B LoRA SFT
+### 2. 从 Hugging Face 获取本项目数据
 
-远端训练环境配置为 Qwen3-8B、LoRA rank 16、learning rate `5e-5`、最大长度 32,768、3 epoch：
+本项目公开的数据集不包含 BIRD 的 SQLite 数据库或 gold SQL。下面的命令下载完整 SFT、正式训练 split、execution-dev 提示词和 Mini-Dev 派生 SFT：
 
 ```bash
+export PROJECT_ROOT=/data/text2sql_qwen3
+python - <<'PY'
+import os
+from huggingface_hub import snapshot_download
+
+root = os.environ["PROJECT_ROOT"]
+snapshot_download(
+    repo_id="craboy4/text-to-sql-struct-distillation-sft",
+    repo_type="dataset",
+    local_dir=f"{root}/hf/sft",
+)
+snapshot_download(
+    repo_id="craboy4/text-to-sql-struct-distillation-minidev",
+    repo_type="dataset",
+    local_dir=f"{root}/hf/minidev_sft",
+)
+PY
+
+mkdir -p "$PROJECT_ROOT/data"
+cp "$PROJECT_ROOT/hf/sft/splits/dbdev4_train_5160.jsonl" \
+  "$PROJECT_ROOT/data/qwen_sft_messages_train_dbdev4.jsonl"
+```
+
+| 文件 | 用途 | 是否用于已报告的 8B 训练 |
+| --- | --- | --- |
+| `qwen_sft_messages.jsonl` | 全量结构化 SFT，6,246 条 | 否，仅作为完整公开导出 |
+| `splits/dbdev4_train_5160.jsonl` | 正式训练集，5,160 条 | 是 |
+| `splits/dbdev4_execution_dev_prompts_400.jsonl` | 四个保留数据库各 100 条的 execution-dev 提示词 | 用于独立开发/检查，不进入训练 |
+| `minidev_sft_messages.jsonl` | 500 条 Mini-Dev 派生 SFT | 不用于已报告的 8B 训练 |
+
+完整数据卡、划分规则和 SHA-256 位于 [SFT 数据集页面](https://huggingface.co/datasets/craboy4/text-to-sql-struct-distillation-sft)。下载后可校验正式训练 split：
+
+```bash
+sha256sum "$PROJECT_ROOT/data/qwen_sft_messages_train_dbdev4.jsonl"
+# 1e46c2a8f6e8d8db69660ba0a8bc98d7fe8de96bd75da8c9a1af31d1afcd934f
+```
+
+### 3. 从 BIRD 上游获取 Mini-Dev 数据库和评测材料
+
+SQLite 数据库、问题、gold SQL 及作者提示词不在本项目或本项目的 Hugging Face 仓库中。请遵守上游许可，从 [bird-bench/mini_dev](https://github.com/bird-bench/mini_dev) 或其 README 所列的完整数据包下载；下面以仓库克隆为例。
+
+```bash
+export PROJECT_ROOT=/data/text2sql_qwen3
+git clone https://github.com/bird-bench/mini_dev.git "$PROJECT_ROOT/third_party/mini_dev"
+python -m pip install -r "$PROJECT_ROOT/third_party/mini_dev/requirements.txt"
+
+mkdir -p "$PROJECT_ROOT/eval"
+cp -a "$PROJECT_ROOT/third_party/mini_dev/minidev/MINIDEV" "$PROJECT_ROOT/eval/MINIDEV"
+```
+
+完成后必须能找到以下文件；本仓库的评测脚本据此执行 500 道 SQLite 题目：
+
+```text
+$PROJECT_ROOT/eval/MINIDEV/
+├── mini_dev_sqlite.json
+├── mini_dev_sqlite_gold.sql
+└── dev_databases/                 # 11 个 SQLite 数据库目录
+```
+
+为复用作者 EX 评测，准备一个只放评测脚本和作者 prompt 的目录。这里复制的是本仓库固定版本的评测脚本，并使用刚下载的上游 prompt：
+
+```bash
+export EVALUATOR_DIR="$PROJECT_ROOT/evaluation_upstream_minidev"
+mkdir -p "$EVALUATOR_DIR"
+cp "$PROJECT_ROOT/BIRD/evaluation/author_minidev/evaluation_ex.py" "$EVALUATOR_DIR/"
+cp "$PROJECT_ROOT/BIRD/evaluation/author_minidev/evaluation_utils.py" "$EVALUATOR_DIR/"
+cp "$PROJECT_ROOT/BIRD/training/prepare_author_ex_predictions.py" "$EVALUATOR_DIR/"
+cp "$PROJECT_ROOT/third_party/mini_dev/finetuning/inference/mini_dev_prompt.jsonl" "$EVALUATOR_DIR/"
+```
+
+### 4. 获取 Qwen3-8B 基座并训练 LoRA
+
+```bash
+export PROJECT_ROOT=/data/text2sql_qwen3
+python - <<'PY'
+import os
+from huggingface_hub import snapshot_download
+snapshot_download(
+    repo_id="Qwen/Qwen3-8B",
+    local_dir=f"{os.environ['PROJECT_ROOT']}/models/Qwen3-8B",
+)
+PY
+```
+
+编辑 [training/env.sh](training/env.sh)，把其中的 `PROJECT_ROOT`、Python 路径和缓存路径改为当前机器的真实路径。随后启动正式配置：
+
+```bash
+cd "$PROJECT_ROOT/BIRD"
 bash training/start_sft_3epoch_dbdev.sh
 ```
 
-当前已验证训练集为从完整 SFT 按数据库划分出的 DB-dev4 SFT，共 5,160 条。4 个保留数据库各抽取 100 条构成 400 条 execution-dev，`works_cycles` 因长上下文单独剔除；完整划分和哈希见数据集卡。训练命令未再从 5,160 条中随机切 validation-loss 集。完整配置见 [qwen3_8b_bird_lora_3epoch_dbdev4.yaml](configs/sft/qwen3_8b_bird_lora_3epoch_dbdev4.yaml)。
+该配置使用 Qwen3-8B、LoRA rank 16、learning rate `5e-5`、最大长度 32,768、3 epoch。训练数据是 5,160 条 `dbdev4_train_5160.jsonl`；训练命令显式设置 `split_dataset_ratio=0`，不会再从其中随机切出 validation-loss 数据。400 条 execution-dev 与训练集数据库不相交。完整参数见 [qwen3_8b_bird_lora_3epoch_dbdev4.yaml](configs/sft/qwen3_8b_bird_lora_3epoch_dbdev4.yaml)。
 
-### 3. 推理与作者 EX 评测
+目前模型仓库只有 [模型卡](https://huggingface.co/craboy4/qwen3-8b-bird-lora-dbdev4)；取得远端的 `checkpoint-969` 后会补充 adapter 文件。因此现在复现同一结果的方式是先运行上面的训练命令，或在 adapter 发布后下载该 checkpoint。
+
+### 5. 生成 Mini-Dev 预测并运行作者 EX
+
+先将 Mini-Dev 转成与 SFT 一致的 messages 格式，再用基座或刚训练完成的 adapter 生成回复：
 
 ```bash
+export PROJECT_ROOT=/data/text2sql_qwen3
+export RUN_DIR="$PROJECT_ROOT/outputs/minidev_checkpoint_969"
+mkdir -p "$RUN_DIR"
+
+cd "$PROJECT_ROOT/BIRD"
+python training/prepare_minidev_inference.py prepare \
+  --minidev-root "$PROJECT_ROOT/eval/MINIDEV" \
+  --sft-dataset "$PROJECT_ROOT/data/qwen_sft_messages_train_dbdev4.jsonl" \
+  --output "$PROJECT_ROOT/eval/minidev_sft_messages.jsonl"
+
 python training/run_minidev_local.py \
-  --model <Qwen3-8B_基座目录> \
-  --adapter <checkpoint-969_目录> \
-  --prompts <minidev_messages.jsonl> \
-  --output <predictions.jsonl> \
+  --model "$PROJECT_ROOT/models/Qwen3-8B" \
+  --adapter "$PROJECT_ROOT/outputs/experiments/<训练运行目录>/checkpoint-969" \
+  --prompts "$PROJECT_ROOT/eval/minidev_sft_messages.jsonl" \
+  --output "$RUN_DIR/responses.jsonl" \
   --batch-size 8
 
-bash scripts/evaluate_author_minidev.sh \
-  <predictions.jsonl> \
-  <evaluation_output_dir>
+python training/prepare_minidev_inference.py extract \
+  --prompts "$PROJECT_ROOT/eval/minidev_sft_messages.jsonl" \
+  --responses "$RUN_DIR/responses.jsonl" \
+  --output "$RUN_DIR/predictions.jsonl"
 ```
 
-评测脚本会以 500 题为固定分母；缺失预测以空 SQL 计错，避免因只评估部分样本而虚高分数。
+最后将本仓库的 `question_id/sql` JSONL 适配为作者格式，并调用作者集合型 EX：
+
+```bash
+PROJECT_ROOT="$PROJECT_ROOT" \
+EVALUATOR_DIR="$PROJECT_ROOT/evaluation_upstream_minidev" \
+PYTHON_BIN=python \
+bash scripts/evaluate_author_minidev.sh \
+  "$RUN_DIR/predictions.jsonl" \
+  "$RUN_DIR/author_ex"
+```
+
+结果写入 `$RUN_DIR/author_ex/author_ex.txt`。脚本始终以 500 题为分母，缺失预测会按空 SQL 计错，避免只评估部分样本造成分数虚高。对于作者原始 prompt 的对照实验，可使用 [prepare_author_minidev_prompts.py](training/prepare_author_minidev_prompts.py) 将上游 `mini_dev_prompt.jsonl` 包装为单个 user message。
+
+### 6. 可选：从 BIRD 训练数据重新构造教师 SFT
+
+公开的 6,246 条 SFT 足以复现本项目的训练；只有需要替换教师模型或重新做数据筛选时，才需要此步骤。此时还必须按 BIRD 上游许可取得训练集、训练数据库和列含义文件，并准备一个本地私有的 `teacher.env`：
+
+```bash
+# 不要把该文件提交、上传或粘贴到 issue 中
+cat > "$PROJECT_ROOT/BIRD/teacher_generation/teacher.env" <<'EOF'
+TEACHER_BASE_URL=https://<你的兼容 OpenAI 的服务地址>
+TEACHER_API_KEY=<你的密钥>
+TEACHER_MODEL=<教师模型名>
+TEACHER_REASONING_EFFORT=high
+EOF
+
+cd "$PROJECT_ROOT"
+python BIRD/teacher_generation/generate_teacher_data.py \
+  --input BIRD/train_filtered/train.jsonl \
+  --database-root BIRD/train/train_databases \
+  --column-meanings BIRD/train_filtered/train_column_meaning.json \
+  --output BIRD/teacher_generation/teacher_output.jsonl \
+  --env-file BIRD/teacher_generation/teacher.env \
+  --limit 10 \
+  --workers 2
+```
+
+脚本会对教师 SQL 和 gold SQL 分别执行，并只将格式正确且执行结果等价的样本标记为 `ready_for_sft`。原始教师响应可能包含上游 SQL、执行输出或供应商信息，因此不应直接公开；公开发布前只导出经审查的 messages JSONL，并记录样本数和 SHA-256。
 
 ---
 

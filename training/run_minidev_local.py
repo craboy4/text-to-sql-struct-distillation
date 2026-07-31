@@ -36,8 +36,8 @@ def load_prompts(path: Path, expected_prompts: int) -> list[dict[str, Any]]:
             roles = [message.get("role") for message in messages] if isinstance(messages, list) else []
             if not isinstance(index, int) or index < 1 or index in seen_indexes:
                 raise ValidationError(f"prompt line {line_number} has an invalid or duplicate example_index")
-            if not isinstance(question_id, int) or roles != ["system", "user"]:
-                raise ValidationError(f"prompt line {line_number} must contain question_id and system/user messages")
+            if not isinstance(question_id, int) or roles not in (["system", "user"], ["user"]):
+                raise ValidationError(f"prompt line {line_number} must contain question_id and user messages")
             if not all(isinstance(message.get("content"), str) for message in messages):
                 raise ValidationError(f"prompt line {line_number} has non-text message content")
             prior = canonical_by_question_id.setdefault(question_id, record)

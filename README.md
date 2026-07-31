@@ -8,7 +8,7 @@
 
 本项目复现并整理了一个面向 BIRD 的结构化 Text-to-SQL 蒸馏流程：从教师样本构造、SFT 数据导出、Qwen3-8B LoRA 训练，到 Mini-Dev 推理和作者 SQLite Execution Accuracy (EX) 评测。工程边界参考 [Struct-SQL-Distillation](https://github.com/craterlabs/Struct-SQL-Distillation)，评测口径采用 [BIRD Mini-Dev](https://github.com/bird-bench/mini_dev) 的作者实现。
 
-> **公开资产：** [完整 SFT（6,246 条）及正式 DB-dev4 训练 split（5,160 条）](https://huggingface.co/datasets/craboy4/text-to-sql-struct-distillation-sft) 和 [Mini-Dev 派生 SFT（500 条）](https://huggingface.co/datasets/craboy4/text-to-sql-struct-distillation-minidev) 已发布到 Hugging Face。最佳 LoRA adapter 和真实推理输出会在从远端训练机取得并核验后按版本补充。
+> **公开资产：** [完整 SFT（6,246 条）及正式 DB-dev4 训练 split（5,160 条）](https://huggingface.co/datasets/craboy4/text-to-sql-struct-distillation-sft)、[Mini-Dev 派生 SFT（500 条）](https://huggingface.co/datasets/craboy4/text-to-sql-struct-distillation-minidev)、[Qwen3-8B LoRA checkpoint-969](https://huggingface.co/craboy4/qwen3-8b-bird-lora-dbdev4) 与 [真实预测及作者 EX 输出](https://huggingface.co/datasets/craboy4/text-to-sql-struct-distillation-results) 均已发布。
 
 ---
 
@@ -22,9 +22,9 @@ flowchart LR
     D --> E[Qwen3-8B LoRA 训练]
     E --> F[Mini-Dev SQL 推理]
     F --> G[作者 SQLite EX 评测]
-    D -.公开.-> H[Hugging Face 数据集]
-    E -.待远端资产到位.-> I[Hugging Face LoRA]
-    G -.待真实输出到位.-> J[Hugging Face 结果集]
+    D -.发布.-> H[Hugging Face 数据集]
+    E -.发布.-> I[Hugging Face LoRA]
+    G -.发布.-> J[Hugging Face 结果集]
 ```
 
 ### 核心方法
@@ -39,10 +39,10 @@ flowchart LR
 
 评测使用 BIRD Mini-Dev SQLite 的 500 道题目和作者集合型 Execution Accuracy (EX) 定义。
 
-| 模型 | 训练状态 | EX | 正确数 |
-| --- | --- | ---: | ---: |
-| Qwen3-8B | 初始模型 | 41.80% | 209 / 500 |
-| **Qwen3-8B + LoRA checkpoint-969** | **DB-dev4 SFT，3 epoch** | **50.40%** | **252 / 500** |
+| 模型 | 训练状态 | 推理 prompt | EX | 正确数 |
+| --- | --- | --- | ---: | ---: |
+| Qwen3-8B | 初始模型 | 本项目构造的结构化 prompt | 41.80% | 209 / 500 |
+| **Qwen3-8B + LoRA checkpoint-969** | **DB-dev4 SFT，3 epoch** | **本项目构造的结构化 prompt** | **50.40%** | **252 / 500** |
 
 相较初始 Qwen3-8B，最佳 checkpoint 在该口径上提升 **8.60 个百分点**。详细约束和结果解释见 [评测说明](docs/评测说明.md)。
 
@@ -56,8 +56,8 @@ flowchart LR
 | 正式 DB-dev4 训练 split | [同一数据集的 `dbdev4_train_5160.jsonl`](https://huggingface.co/datasets/craboy4/text-to-sql-struct-distillation-sft/tree/main/splits) | 已发布，5,160 条 |
 | DB-dev4 execution-dev | [同一数据集的 `dbdev4_execution_dev_prompts_400.jsonl`](https://huggingface.co/datasets/craboy4/text-to-sql-struct-distillation-sft/tree/main/splits) | 已发布，4 个保留数据库各 100 条，无 gold SQL |
 | Mini-Dev 派生 SFT | [Hugging Face 数据集](https://huggingface.co/datasets/craboy4/text-to-sql-struct-distillation-minidev) | 已发布，500 条 |
-| Qwen3-8B LoRA `checkpoint-969` | [Hugging Face 模型](https://huggingface.co/craboy4/qwen3-8b-bird-lora-dbdev4) | 远端约 501 MB adapter 待获取 |
-| 预测与作者 EX 输出 | [Hugging Face 结果集](https://huggingface.co/datasets/craboy4/text-to-sql-struct-distillation-results) | 远端真实输出待获取 |
+| Qwen3-8B LoRA `checkpoint-969` | [Hugging Face 模型](https://huggingface.co/craboy4/qwen3-8b-bird-lora-dbdev4) | 已发布，标准 PEFT LoRA 权重及配置 |
+| 预测与作者 EX 输出 | [Hugging Face 结果集](https://huggingface.co/datasets/craboy4/text-to-sql-struct-distillation-results) | 已发布，498 条原始预测、500 题作者格式输出与 EX 日志 |
 
 每项资产的来源、大小、远端路径和发布边界记录在 [资产清单](docs/资产清单.md)。不会公开 BIRD SQLite 数据库、gold SQL、未确认许可证的原始数据或任何 API 凭据。
 
@@ -191,7 +191,7 @@ bash training/start_sft_3epoch_dbdev.sh
 
 该配置使用 Qwen3-8B、LoRA rank 16、learning rate `5e-5`、最大长度 32,768、3 epoch。训练数据是 5,160 条 `dbdev4_train_5160.jsonl`；训练命令显式设置 `split_dataset_ratio=0`，不会再从其中随机切出 validation-loss 数据。400 条 execution-dev 与训练集数据库不相交。完整参数见 [qwen3_8b_bird_lora_3epoch_dbdev4.yaml](configs/sft/qwen3_8b_bird_lora_3epoch_dbdev4.yaml)。
 
-目前模型仓库只有 [模型卡](https://huggingface.co/craboy4/qwen3-8b-bird-lora-dbdev4)；取得远端的 `checkpoint-969` 后会补充 adapter 文件。因此现在复现同一结果的方式是先运行上面的训练命令，或在 adapter 发布后下载该 checkpoint。
+最佳 `checkpoint-969` 的标准 PEFT adapter 已发布到 [模型仓库](https://huggingface.co/craboy4/qwen3-8b-bird-lora-dbdev4)，可直接按模型卡加载；其 SHA-256 为 `8940b165798f62e7d13b978cc43646077db2a56e03c504c445e1b1e914dd4464`。
 
 ### 5. 生成 Mini-Dev 预测并运行作者 EX
 

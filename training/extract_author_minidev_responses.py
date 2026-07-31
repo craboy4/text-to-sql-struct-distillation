@@ -11,6 +11,7 @@ from typing import Any
 
 
 EXPECTED_QUESTIONS = 500
+XML_SQL = re.compile(r"<sql>\s*(.*?)\s*</sql>", flags=re.IGNORECASE | re.DOTALL)
 SQL_BLOCK = re.compile(r"```(?:sql|sqlite)?\s*\n?(.*?)```", flags=re.IGNORECASE | re.DOTALL)
 RAW_SQL = re.compile(r"(?is)\b(?:WITH|SELECT)\b.*")
 
@@ -32,6 +33,9 @@ def load_jsonl(path: Path) -> list[dict[str, Any]]:
 
 
 def extract_sql(response: str) -> str | None:
+    match = XML_SQL.search(response)
+    if match:
+        return match.group(1).strip()
     match = SQL_BLOCK.search(response)
     if match:
         return match.group(1).strip()
